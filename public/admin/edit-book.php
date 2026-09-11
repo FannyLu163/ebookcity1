@@ -49,6 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (mb_strlen(trim((string)($_POST['sn'] ?? '')), 'UTF-8') > 20) {
             throw new RuntimeException('書號最多 20 個字');
         }
+        if (mb_strlen(trim((string)($_POST['preview_notice'] ?? '')), 'UTF-8') > 500) {
+            throw new RuntimeException('試閱說明最多 500 個字');
+        }
         $newId = admin_save_book($_POST);
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
         exit;
@@ -131,9 +134,13 @@ ob_start();
         <div class="col-md-4 d-flex align-items-end"><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="is_visible" value="1"<?= checked_attr(!empty($book['is_visible'])) ?>> 前台顯示</label></div>
         <div class="col-md-6"><label class="form-label">圖片路徑</label><input class="form-control" name="picture" value="<?= h($book['picture'] ?? '') ?>"></div>
         <div class="col-md-6"><label class="form-label">縮圖路徑</label><input class="form-control" name="thumb" value="<?= h($book['thumb'] ?? '') ?>"></div>
-        <div class="col-12"><label class="form-label">簡介</label><textarea class="form-control" name="short_intro" rows="6"><?= h($book['short_intro'] ?? '') ?></textarea></div>
+        <div class="col-12">
+            <label class="form-label">簡介 HTML</label>
+            <textarea class="form-control font-monospace" name="short_intro" rows="10" spellcheck="false" placeholder="<p>可輸入 HTML 內容</p>"><?= h($book['short_intro'] ?? '') ?></textarea>
+            <div class="form-text">可輸入 HTML，例如 &lt;p&gt;、&lt;br&gt;、&lt;strong&gt;、&lt;ul&gt;。內容會在前台書籍頁直接渲染。</div>
+        </div>
         <div class="col-12"><label class="form-label">目錄</label><textarea class="form-control" name="toc" rows="6"><?= h($book['toc'] ?? '') ?></textarea></div>
-        <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>"></div>
+        <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>" maxlength="500"><div class="form-text">最多 500 個字</div></div>
     </div>
     <div class="mt-3"><button class="btn btn-success" type="submit">儲存</button></div>
 </form>
