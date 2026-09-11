@@ -614,14 +614,20 @@ function admin_find_book(int $id): ?array
     }
     $stmt = $pdo->prepare('SELECT TOP (1) p.id, COALESCE(bp.display_title, p.prod_name) AS title, bp.subtitle,
         COALESCE(bp.display_author, p.author) AS author, p.pubdate, p.isbn, p.sn, p.picture, p.thumb,
-        p.cat_id, bp.slug, bp.short_intro, bp.toc, bp.preview_notice,
+        p.cat_id, ISNULL(bc.parent, 0) AS parent_cat_id, bp.slug, bp.short_intro, bp.toc, bp.preview_notice,
         CAST(CASE WHEN (p.avail = 1 OR p.avail IS NULL) AND (bp.[status] = 1 OR bp.id IS NULL) THEN 1 ELSE 0 END AS INT) AS is_visible
         FROM dbo.products AS p
         LEFT JOIN dbo.book_profiles AS bp ON bp.product_id = p.id
+        LEFT JOIN dbo.categories AS bc ON bc.id = p.cat_id
         WHERE p.id = :id');
     $stmt->bindValue(':id', $id, PDO::PARAM_INT);
     $stmt->execute();
-    return $stmt->fetch() ?: null;
+    $book = $stmt->fetch();
+    if (!$book) {
+        return null;
+    }
+    $book['selected_author_ids'] = admin_book_author_ids($id);
+    return $book;
 }
 
 function admin_save_book(array $data): int
@@ -631,6 +637,16 @@ function admin_save_book(array $data): int
         throw new RuntimeException('資料庫尚未連線');
     }
     $id = (int)($data['id'] ?? 0);
+    $selectedAuthorIds = normalize_author_ids($data['selected_author_ids'] ?? []);
+    if (!empty($data['new_author_name'])) {
+        $newAuthorId = admin_create_author_name((string)$data['new_author_name']);
+        if (!in_array($newAuthorId, $selectedAuthorIds, true)) {
+            $selectedAuthorIds[] = $newAuthorId;
+        }
+    }
+    if ($selectedAuthorIds) {
+        $data['author'] = admin_author_display_name($selectedAuthorIds, (string)($data['author'] ?? ''));
+    }
     $visible = !empty($data['is_visible']) ? 1 : 0;
     if ($id <= 0) {
         $next = $pdo->query('SELECT ISNULL(MAX(id), 0) + 1 FROM dbo.products WITH (UPDLOCK, HOLDLOCK)');
@@ -658,6 +674,7 @@ function admin_save_book(array $data): int
     }
     bind_book_profile_form($profile, $id, $data, $visible);
     $profile->execute();
+    sync_admin_book_authors($pdo, $id, $selectedAuthorIds);
     sync_admin_book_category_tags($pdo, $id, (int)($data['cat_id'] ?? 0));
     return $id;
 }
@@ -722,6 +739,136 @@ function admin_category_options(): array
         }
     }
     return $items;
+}
+
+function admin_category_tree_options(): array
+{
+    return find_category_menu();
+}
+
+function admin_author_options(): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return [];
+    }
+    $stmt = $pdo->query('SELECT a.id, a.pen_name, a.slug, ISNULL(book_counts.book_count, 0) AS book_count
+        FROM dbo.author_profiles AS a
+        LEFT JOIN (
+            SELECT author_profile_id, COUNT(*) AS book_count
+            FROM dbo.author_book_map
+            GROUP BY author_profile_id
+        ) AS book_counts ON book_counts.author_profile_id = a.id
+        WHERE a.[status] = 1
+        ORDER BY a.pen_name ASC');
+    return $stmt->fetchAll();
+}
+
+function admin_book_author_ids(int $productId): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return [];
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT author_profile_id FROM dbo.author_book_map WHERE product_id = :id ORDER BY created_at ASC, author_profile_id ASC');
+        $stmt->bindValue(':id', $productId, PDO::PARAM_INT);
+        $stmt->execute();
+        return array_map('intval', array_column($stmt->fetchAll(), 'author_profile_id'));
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+function normalize_author_ids($ids): array
+{
+    if (!is_array($ids)) {
+        $ids = [$ids];
+    }
+    $normalized = [];
+    foreach ($ids as $id) {
+        $id = (int)$id;
+        if ($id > 0 && !in_array($id, $normalized, true)) {
+            $normalized[] = $id;
+        }
+    }
+    return $normalized;
+}
+
+function admin_create_author_name(string $name): int
+{
+    $name = trim($name);
+    if ($name === '') {
+        return 0;
+    }
+    return admin_save_author([
+        'pen_name' => $name,
+        'slug' => create_author_slug($name),
+        'site_url' => '',
+        'site2_url' => '',
+        'intro' => '',
+        'speak' => '',
+        'avatar_image' => '',
+        'profile_image' => '',
+        'sort_order' => 0,
+        'is_recommended' => 0,
+        'status' => 1,
+    ]);
+}
+
+function create_author_slug(string $name): string
+{
+    $base = 'author-' . create_slug($name);
+    return $base === 'author-' ? 'author-new' : $base;
+}
+
+function admin_author_display_name(array $ids, string $fallback): string
+{
+    $pdo = db();
+    if (!$pdo || !$ids) {
+        return $fallback;
+    }
+    $placeholders = [];
+    $params = [];
+    foreach ($ids as $index => $id) {
+        $name = ':id' . $index;
+        $placeholders[] = $name;
+        $params[$name] = $id;
+    }
+    $stmt = $pdo->prepare('SELECT id, pen_name FROM dbo.author_profiles WHERE id IN (' . implode(',', $placeholders) . ')');
+    foreach ($params as $name => $value) {
+        $stmt->bindValue($name, $value, PDO::PARAM_INT);
+    }
+    $stmt->execute();
+    $namesById = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $namesById[(int)$row['id']] = (string)$row['pen_name'];
+    }
+    $names = [];
+    foreach ($ids as $id) {
+        if (!empty($namesById[$id])) {
+            $names[] = $namesById[$id];
+        }
+    }
+    return $names ? implode('、', $names) : $fallback;
+}
+
+function sync_admin_book_authors(PDO $pdo, int $productId, array $authorIds): void
+{
+    try {
+        $delete = $pdo->prepare('DELETE FROM dbo.author_book_map WHERE product_id = :id');
+        $delete->bindValue(':id', $productId, PDO::PARAM_INT);
+        $delete->execute();
+        foreach ($authorIds as $index => $authorId) {
+            $insert = $pdo->prepare('INSERT INTO dbo.author_book_map (author_profile_id, product_id, source_note, created_at)
+                VALUES (:author_id, :product_id, N\'php-admin\', DATEADD(SECOND, :sort_order, SYSUTCDATETIME()))');
+            $insert->bindValue(':author_id', $authorId, PDO::PARAM_INT);
+            $insert->bindValue(':product_id', $productId, PDO::PARAM_INT);
+            $insert->bindValue(':sort_order', $index, PDO::PARAM_INT);
+            $insert->execute();
+        }
+    } catch (Throwable) {
+    }
 }
 
 function create_slug(string $value): string
