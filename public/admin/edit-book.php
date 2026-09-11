@@ -159,9 +159,32 @@ ob_start();
             <div class="form-text">縮圖路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：250x250 內，500KB 以內。</div>
         </div>
         <div class="col-12">
-            <label class="form-label">簡介 HTML</label>
-            <textarea class="form-control font-monospace" name="short_intro" rows="10" spellcheck="false" placeholder="<p>可輸入 HTML 內容</p>"><?= h($book['short_intro'] ?? '') ?></textarea>
-            <div class="form-text">可輸入 HTML，例如 &lt;p&gt;、&lt;br&gt;、&lt;strong&gt;、&lt;ul&gt;。內容會在前台書籍頁直接渲染。</div>
+            <label class="form-label">簡介</label>
+            <textarea class="visually-hidden" id="ShortIntro" name="short_intro"><?= h($book['short_intro'] ?? '') ?></textarea>
+            <div class="rich-editor border rounded">
+                <div class="rich-editor-toolbar border-bottom bg-body-tertiary p-2 d-flex flex-wrap gap-2" role="toolbar" aria-label="簡介文字工具列">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-command="bold" title="粗體"><strong>B</strong></button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-command="italic" title="斜體"><em>I</em></button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-command="underline" title="底線"><u>U</u></button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-block="p">段落</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-block="h3">標題</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-command="insertUnorderedList">清單</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-command="insertOrderedList">編號</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-action="link">連結</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-action="clear">清除格式</button>
+                    <select class="form-select form-select-sm rich-editor-font" id="ShortIntroFontName" aria-label="字型">
+                        <option value="">字型</option>
+                        <option value="Microsoft JhengHei">微軟正黑體</option>
+                        <option value="PMingLiU">新細明體</option>
+                        <option value="MingLiU">細明體</option>
+                        <option value="DFKai-SB">標楷體</option>
+                        <option value="Arial">Arial</option>
+                        <option value="Georgia">Georgia</option>
+                    </select>
+                </div>
+                <div id="ShortIntroEditor" class="rich-editor-surface p-3 bg-white" contenteditable="true" aria-label="簡介內容"><?= $book['short_intro'] ?? '' ?></div>
+            </div>
+            <div class="form-text">此欄位會儲存為 HTML，並在前台書籍頁直接渲染。</div>
         </div>
         <div class="col-12"><label class="form-label">目錄</label><textarea class="form-control" name="toc" rows="6"><?= h($book['toc'] ?? '') ?></textarea></div>
         <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>" maxlength="500"><div class="form-text">最多 500 個字</div></div>
@@ -272,6 +295,67 @@ ob_start();
         if (newAuthorInput.value.trim()) newAuthorPanel.classList.remove('d-none');
     }
     syncAuthorName();
+})();
+(function () {
+    var editor = document.getElementById('ShortIntroEditor');
+    var field = document.getElementById('ShortIntro');
+    if (!editor || !field) return;
+
+    function sync() {
+        field.value = editor.innerHTML;
+    }
+    function focusEditor() {
+        editor.focus();
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-command]'), function (button) {
+        button.addEventListener('click', function () {
+            focusEditor();
+            document.execCommand(button.getAttribute('data-command'), false, null);
+            sync();
+        });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-block]'), function (button) {
+        button.addEventListener('click', function () {
+            focusEditor();
+            document.execCommand('formatBlock', false, button.getAttribute('data-block'));
+            sync();
+        });
+    });
+    var linkButton = document.querySelector('[data-action="link"]');
+    if (linkButton) {
+        linkButton.addEventListener('click', function () {
+            focusEditor();
+            var url = window.prompt('請輸入連結網址', 'https://');
+            if (url && url !== 'https://') {
+                document.execCommand('createLink', false, url);
+                sync();
+            }
+        });
+    }
+    var clearButton = document.querySelector('[data-action="clear"]');
+    if (clearButton) {
+        clearButton.addEventListener('click', function () {
+            focusEditor();
+            document.execCommand('removeFormat', false, null);
+            sync();
+        });
+    }
+    var fontSelect = document.getElementById('ShortIntroFontName');
+    if (fontSelect) {
+        fontSelect.addEventListener('change', function () {
+            if (!fontSelect.value) return;
+            focusEditor();
+            document.execCommand('fontName', false, fontSelect.value);
+            fontSelect.value = '';
+            sync();
+        });
+    }
+    editor.addEventListener('input', sync);
+    var form = editor.closest('form');
+    if (form) {
+        form.addEventListener('submit', sync);
+    }
+    sync();
 })();
 </script>
 <?php admin_layout($id > 0 ? '編輯書籍' : '新增書籍', ob_get_clean()); ?>
