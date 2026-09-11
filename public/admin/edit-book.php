@@ -148,14 +148,20 @@ ob_start();
         <div class="col-md-4 d-flex align-items-end"><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="is_visible" value="1"<?= checked_attr(!empty($book['is_visible'])) ?>> 前台顯示</label></div>
         <div class="col-md-6">
             <label class="form-label">圖片路徑</label>
-            <input class="form-control" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255">
-            <input class="form-control mt-2" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp">
+            <div class="admin-image-preview mb-2">
+                <img id="PicturePreview" src="<?= h(asset($book['picture'] ?? '')) ?>" alt="圖片預覽" onerror="this.src='/images/logo_discuss.png'">
+            </div>
+            <input class="form-control image-path-input" id="PicturePath" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255" data-preview="PicturePreview">
+            <input class="form-control mt-2 image-file-input" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="PicturePreview">
             <div class="form-text">圖片路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：500x500 內，1MB 以內。</div>
         </div>
         <div class="col-md-6">
             <label class="form-label">縮圖路徑</label>
-            <input class="form-control" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255">
-            <input class="form-control mt-2" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp">
+            <div class="admin-image-preview mb-2">
+                <img id="ThumbPreview" src="<?= h(asset($book['thumb'] ?? '')) ?>" alt="縮圖預覽" onerror="this.src='/images/logo_discuss.png'">
+            </div>
+            <input class="form-control image-path-input" id="ThumbPath" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255" data-preview="ThumbPreview">
+            <input class="form-control mt-2 image-file-input" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="ThumbPreview">
             <div class="form-text">縮圖路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：250x250 內，500KB 以內。</div>
         </div>
         <div class="col-12">
@@ -356,6 +362,35 @@ ob_start();
         form.addEventListener('submit', sync);
     }
     sync();
+})();
+(function () {
+    function previewImage(id, src) {
+        var image = document.getElementById(id);
+        if (!image) return;
+        image.src = src && src.trim() ? src.trim() : '/images/logo_discuss.png';
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.image-path-input'), function (input) {
+        input.addEventListener('input', function () {
+            previewImage(input.getAttribute('data-preview'), input.value);
+        });
+        input.addEventListener('change', function () {
+            previewImage(input.getAttribute('data-preview'), input.value);
+        });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.image-file-input'), function (input) {
+        input.addEventListener('change', function () {
+            var imageId = input.getAttribute('data-preview');
+            if (!input.files || !input.files[0] || !imageId) return;
+            var url = URL.createObjectURL(input.files[0]);
+            var image = document.getElementById(imageId);
+            if (!image) {
+                URL.revokeObjectURL(url);
+                return;
+            }
+            image.onload = function () { URL.revokeObjectURL(url); };
+            image.src = url;
+        });
+    });
 })();
 </script>
 <?php admin_layout($id > 0 ? '編輯書籍' : '新增書籍', ob_get_clean()); ?>
