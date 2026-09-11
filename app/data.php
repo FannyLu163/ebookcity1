@@ -638,6 +638,8 @@ function admin_save_book(array $data): int
     }
     $title = trim((string)($data['title'] ?? ''));
     $subtitle = trim((string)($data['subtitle'] ?? ''));
+    $isbn = trim((string)($data['isbn'] ?? ''));
+    $bookNumber = trim((string)($data['sn'] ?? ''));
     if ($title === '') {
         throw new RuntimeException('請輸入書名');
     }
@@ -646,6 +648,12 @@ function admin_save_book(array $data): int
     }
     if (mb_strlen($subtitle, 'UTF-8') > 100) {
         throw new RuntimeException('副標題最多 100 個字');
+    }
+    if (mb_strlen($isbn, 'UTF-8') > 20) {
+        throw new RuntimeException('ISBN 最多 20 個字');
+    }
+    if (mb_strlen($bookNumber, 'UTF-8') > 20) {
+        throw new RuntimeException('書號最多 20 個字');
     }
     $id = (int)($data['id'] ?? 0);
     $selectedAuthorIds = normalize_author_ids($data['selected_author_ids'] ?? []);

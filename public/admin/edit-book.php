@@ -43,6 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (mb_strlen($subtitleValue, 'UTF-8') > 100) {
             throw new RuntimeException('副標題最多 100 個字');
         }
+        if (mb_strlen(trim((string)($_POST['isbn'] ?? '')), 'UTF-8') > 20) {
+            throw new RuntimeException('ISBN 最多 20 個字');
+        }
+        if (mb_strlen(trim((string)($_POST['sn'] ?? '')), 'UTF-8') > 20) {
+            throw new RuntimeException('書號最多 20 個字');
+        }
         $newId = admin_save_book($_POST);
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
         exit;
@@ -69,8 +75,8 @@ ob_start();
         <div class="col-md-4"><label class="form-label">副標題</label><input class="form-control" name="subtitle" value="<?= h($book['subtitle'] ?? '') ?>" maxlength="100"><div class="form-text">最多 100 個字</div></div>
         <input type="hidden" id="Author" name="author" value="<?= h($book['author'] ?? '') ?>">
         <div class="col-md-4"><label class="form-label">出版日期</label><input class="form-control" name="pubdate" type="date" value="<?= h(!empty($book['pubdate']) ? substr((string)$book['pubdate'], 0, 10) : '') ?>"></div>
-        <div class="col-md-4"><label class="form-label">ISBN</label><input class="form-control" name="isbn" value="<?= h($book['isbn'] ?? '') ?>"></div>
-        <div class="col-md-4"><label class="form-label">書號</label><input class="form-control" name="sn" value="<?= h($book['sn'] ?? '') ?>"></div>
+        <div class="col-md-4"><label class="form-label">ISBN</label><input class="form-control" name="isbn" value="<?= h($book['isbn'] ?? '') ?>" maxlength="20"><div class="form-text">最多 20 個字</div></div>
+        <div class="col-md-4"><label class="form-label">書號</label><input class="form-control" name="sn" value="<?= h($book['sn'] ?? '') ?>" maxlength="20"><div class="form-text">最多 20 個字</div></div>
         <div class="col-md-6">
             <label class="form-label">主分類</label>
             <select class="form-select" id="ParentCategoryId" name="parent_cat_id">
