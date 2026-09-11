@@ -169,8 +169,8 @@ ob_start();
             </div>
             <input class="form-control image-path-input<?= isset($fieldErrors['picture']) ? ' is-invalid' : '' ?>" id="PicturePath" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255" data-preview="PicturePreview">
             <?php if (isset($fieldErrors['picture'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['picture']) ?></div><?php endif; ?>
-            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['picture_file']) ? ' is-invalid' : '' ?>" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="PicturePreview">
-            <?php if (isset($fieldErrors['picture_file'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['picture_file']) ?></div><?php endif; ?>
+            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['picture_file']) ? ' is-invalid' : '' ?>" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="PicturePreview" data-max-width="500" data-max-height="500" data-max-bytes="1048576" data-label="圖片">
+            <?php if (isset($fieldErrors['picture_file'])): ?><div class="invalid-feedback d-block image-file-error"><?= h($fieldErrors['picture_file']) ?></div><?php endif; ?>
             <div class="form-text">圖片路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：500x500 內，1MB 以內。</div>
         </div>
         <div class="col-md-6">
@@ -180,8 +180,8 @@ ob_start();
             </div>
             <input class="form-control image-path-input<?= isset($fieldErrors['thumb']) ? ' is-invalid' : '' ?>" id="ThumbPath" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255" data-preview="ThumbPreview">
             <?php if (isset($fieldErrors['thumb'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['thumb']) ?></div><?php endif; ?>
-            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['thumb_file']) ? ' is-invalid' : '' ?>" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="ThumbPreview">
-            <?php if (isset($fieldErrors['thumb_file'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['thumb_file']) ?></div><?php endif; ?>
+            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['thumb_file']) ? ' is-invalid' : '' ?>" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="ThumbPreview" data-max-width="250" data-max-height="250" data-max-bytes="512000" data-label="縮圖">
+            <?php if (isset($fieldErrors['thumb_file'])): ?><div class="invalid-feedback d-block image-file-error"><?= h($fieldErrors['thumb_file']) ?></div><?php endif; ?>
             <div class="form-text">縮圖路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：250x250 內，500KB 以內。</div>
         </div>
         <div class="col-12">
@@ -411,19 +411,100 @@ ob_start();
         });
     });
     Array.prototype.forEach.call(document.querySelectorAll('.image-file-input'), function (input) {
+        function findError() {
+            var next = input.nextElementSibling;
+            if (next && next.classList.contains('image-file-error')) return next;
+            var error = document.createElement('div');
+            error.className = 'invalid-feedback d-block image-file-error';
+            input.insertAdjacentElement('afterend', error);
+            return error;
+        }
+        function clearError() {
+            input.classList.remove('is-invalid');
+            input.setCustomValidity('');
+            var error = findError();
+            error.textContent = '';
+            error.classList.add('d-none');
+        }
+        function showError(message) {
+            input.classList.add('is-invalid');
+            input.setCustomValidity(message);
+            var error = findError();
+            error.textContent = message;
+            error.classList.remove('d-none');
+        }
+        function formatBytes(bytes) {
+            if (bytes >= 1024 * 1024) return Math.round(bytes / 1024 / 1024) + 'MB';
+            return Math.round(bytes / 1024) + 'KB';
+        }
+        function validateSelectedFile() {
+            clearError();
+            var file = input.files && input.files[0] ? input.files[0] : null;
+            if (!file) return;
+
+            var label = input.getAttribute('data-label') || '圖片';
+            var allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            var maxBytes = parseInt(input.getAttribute('data-max-bytes') || '0', 10);
+            var maxWidth = parseInt(input.getAttribute('data-max-width') || '0', 10);
+            var maxHeight = parseInt(input.getAttribute('data-max-height') || '0', 10);
+            if (allowedTypes.indexOf(file.type) === -1) {
+                showError('只允許上傳 jpg、png、gif、webp 圖片');
+                return;
+            }
+            if (maxBytes > 0 && file.size > maxBytes) {
+                showError(label + '檔案大小不可超過 ' + formatBytes(maxBytes));
+                return;
+            }
+
+            input.setCustomValidity('正在檢查圖片尺寸');
+            var url = URL.createObjectURL(file);
+            var probe = new Image();
+            probe.onload = function () {
+                URL.revokeObjectURL(url);
+                if ((maxWidth > 0 && probe.naturalWidth > maxWidth) || (maxHeight > 0 && probe.naturalHeight > maxHeight)) {
+                    showError(label + '尺寸不可超過 ' + maxWidth + 'x' + maxHeight + '，目前為 ' + probe.naturalWidth + 'x' + probe.naturalHeight);
+                    return;
+                }
+                clearError();
+            };
+            probe.onerror = function () {
+                URL.revokeObjectURL(url);
+                showError('無法讀取圖片尺寸，請選擇有效圖片檔');
+            };
+            probe.src = url;
+        }
         input.addEventListener('change', function () {
             var imageId = input.getAttribute('data-preview');
+            clearError();
             if (!input.files || !input.files[0] || !imageId) return;
             var url = URL.createObjectURL(input.files[0]);
             var image = document.getElementById(imageId);
             if (!image) {
                 URL.revokeObjectURL(url);
+                validateSelectedFile();
                 return;
             }
             image.onload = function () { URL.revokeObjectURL(url); };
             image.src = url;
+            validateSelectedFile();
+        });
+        input.addEventListener('invalid', function () {
+            window.setTimeout(function () {
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                input.focus({ preventScroll: true });
+            }, 0);
         });
     });
+    var form = document.querySelector('form[enctype="multipart/form-data"]');
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            var invalidFile = form.querySelector('.image-file-input:invalid');
+            if (!invalidFile) return;
+            event.preventDefault();
+            invalidFile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            invalidFile.focus({ preventScroll: true });
+        });
+    }
 })();
 </script>
 <?php admin_layout($id > 0 ? '編輯書籍' : '新增書籍', ob_get_clean()); ?>
