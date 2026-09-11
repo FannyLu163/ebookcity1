@@ -5,6 +5,8 @@ admin_require();
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $error = '';
+$fieldErrors = [];
+$firstErrorField = '';
 $saved = isset($_GET['saved']);
 $book = $id > 0 ? admin_find_book($id) : [
     'id' => 0, 'title' => '', 'subtitle' => '', 'author' => '', 'pubdate' => date('Y-m-d'), 'isbn' => '', 'sn' => '',
@@ -35,42 +37,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titleValue = trim((string)($_POST['title'] ?? ''));
         $subtitleValue = trim((string)($_POST['subtitle'] ?? ''));
         if ($titleValue === '') {
-            throw new RuntimeException('請輸入書名');
+            $fieldErrors['title'] = '請輸入書名';
         }
         if (mb_strlen($titleValue, 'UTF-8') > 50) {
-            throw new RuntimeException('書名最多 50 個字');
+            $fieldErrors['title'] = '書名最多 50 個字';
         }
         if (mb_strlen($subtitleValue, 'UTF-8') > 100) {
-            throw new RuntimeException('副標題最多 100 個字');
+            $fieldErrors['subtitle'] = '副標題最多 100 個字';
         }
         if (mb_strlen(trim((string)($_POST['isbn'] ?? '')), 'UTF-8') > 20) {
-            throw new RuntimeException('ISBN 最多 20 個字');
+            $fieldErrors['isbn'] = 'ISBN 最多 20 個字';
         }
         if (mb_strlen(trim((string)($_POST['sn'] ?? '')), 'UTF-8') > 20) {
-            throw new RuntimeException('書號最多 20 個字');
+            $fieldErrors['sn'] = '書號最多 20 個字';
         }
         if (mb_strlen(trim((string)($_POST['preview_notice'] ?? '')), 'UTF-8') > 500) {
-            throw new RuntimeException('試閱說明最多 500 個字');
+            $fieldErrors['preview_notice'] = '試閱說明最多 500 個字';
         }
         if (mb_strlen(trim((string)($_POST['picture'] ?? '')), 'UTF-8') > 255) {
-            throw new RuntimeException('圖片路徑最多 255 個字');
+            $fieldErrors['picture'] = '圖片路徑最多 255 個字';
         }
         if (mb_strlen(trim((string)($_POST['thumb'] ?? '')), 'UTF-8') > 255) {
-            throw new RuntimeException('縮圖路徑最多 255 個字');
+            $fieldErrors['thumb'] = '縮圖路徑最多 255 個字';
         }
-        $uploadedPicture = admin_save_book_image_upload('picture_file', $id, 'cover', 500, 500, 1024 * 1024);
-        if ($uploadedPicture !== null) {
-            $_POST['picture'] = $uploadedPicture;
+        if ($fieldErrors) {
+            throw new RuntimeException('請修正欄位錯誤');
         }
-        $uploadedThumb = admin_save_book_image_upload('thumb_file', $id, 'thumb', 250, 250, 500 * 1024);
-        if ($uploadedThumb !== null) {
-            $_POST['thumb'] = $uploadedThumb;
+        try {
+            $uploadedPicture = admin_save_book_image_upload('picture_file', $id, 'cover', 500, 500, 1024 * 1024);
+            if ($uploadedPicture !== null) {
+                $_POST['picture'] = $uploadedPicture;
+            }
+        } catch (Throwable $uploadError) {
+            $fieldErrors['picture_file'] = $uploadError->getMessage();
+            throw new RuntimeException('請修正欄位錯誤');
+        }
+        try {
+            $uploadedThumb = admin_save_book_image_upload('thumb_file', $id, 'thumb', 250, 250, 500 * 1024);
+            if ($uploadedThumb !== null) {
+                $_POST['thumb'] = $uploadedThumb;
+            }
+        } catch (Throwable $uploadError) {
+            $fieldErrors['thumb_file'] = $uploadError->getMessage();
+            throw new RuntimeException('請修正欄位錯誤');
         }
         $newId = admin_save_book($_POST);
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
         exit;
     } catch (Throwable $e) {
-        $error = $e->getMessage();
+        $error = $fieldErrors ? '' : $e->getMessage();
+        $firstErrorField = $fieldErrors ? (string)array_key_first($fieldErrors) : '';
         $book = $_POST + ['id' => $id, 'selected_author_ids' => $_POST['selected_author_ids'] ?? []];
         $selectedAuthorIds = normalize_author_ids($_POST['selected_author_ids'] ?? []);
         $selectedParentId = (int)($_POST['parent_cat_id'] ?? 0);
@@ -85,15 +101,15 @@ ob_start();
 </div>
 <?php if ($saved): ?><div class="alert alert-success">已儲存。</div><?php endif; ?>
 <?php if ($error !== ''): ?><div class="alert alert-danger"><?= h($error) ?></div><?php endif; ?>
-<form method="post" class="bg-white border rounded p-3" enctype="multipart/form-data">
+<form method="post" class="bg-white border rounded p-3" enctype="multipart/form-data" data-first-error="<?= h($firstErrorField) ?>">
     <input type="hidden" name="id" value="<?= h((string)($book['id'] ?? 0)) ?>">
     <div class="row g-3">
-        <div class="col-md-8"><label class="form-label">書名</label><input class="form-control" name="title" value="<?= h($book['title'] ?? '') ?>" maxlength="50" required><div class="form-text">最多 50 個字</div></div>
-        <div class="col-md-4"><label class="form-label">副標題</label><input class="form-control" name="subtitle" value="<?= h($book['subtitle'] ?? '') ?>" maxlength="100"><div class="form-text">最多 100 個字</div></div>
+        <div class="col-md-8"><label class="form-label">書名</label><input class="form-control<?= isset($fieldErrors['title']) ? ' is-invalid' : '' ?>" name="title" value="<?= h($book['title'] ?? '') ?>" maxlength="50" required><?php if (isset($fieldErrors['title'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['title']) ?></div><?php endif; ?><div class="form-text">最多 50 個字</div></div>
+        <div class="col-md-4"><label class="form-label">副標題</label><input class="form-control<?= isset($fieldErrors['subtitle']) ? ' is-invalid' : '' ?>" name="subtitle" value="<?= h($book['subtitle'] ?? '') ?>" maxlength="100"><?php if (isset($fieldErrors['subtitle'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['subtitle']) ?></div><?php endif; ?><div class="form-text">最多 100 個字</div></div>
         <input type="hidden" id="Author" name="author" value="<?= h($book['author'] ?? '') ?>">
         <div class="col-md-4"><label class="form-label">出版日期</label><input class="form-control" name="pubdate" type="date" value="<?= h(!empty($book['pubdate']) ? substr((string)$book['pubdate'], 0, 10) : '') ?>"></div>
-        <div class="col-md-4"><label class="form-label">ISBN</label><input class="form-control" name="isbn" value="<?= h($book['isbn'] ?? '') ?>" maxlength="20"><div class="form-text">最多 20 個字</div></div>
-        <div class="col-md-4"><label class="form-label">書號</label><input class="form-control" name="sn" value="<?= h($book['sn'] ?? '') ?>" maxlength="20"><div class="form-text">最多 20 個字</div></div>
+        <div class="col-md-4"><label class="form-label">ISBN</label><input class="form-control<?= isset($fieldErrors['isbn']) ? ' is-invalid' : '' ?>" name="isbn" value="<?= h($book['isbn'] ?? '') ?>" maxlength="20"><?php if (isset($fieldErrors['isbn'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['isbn']) ?></div><?php endif; ?><div class="form-text">最多 20 個字</div></div>
+        <div class="col-md-4"><label class="form-label">書號</label><input class="form-control<?= isset($fieldErrors['sn']) ? ' is-invalid' : '' ?>" name="sn" value="<?= h($book['sn'] ?? '') ?>" maxlength="20"><?php if (isset($fieldErrors['sn'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['sn']) ?></div><?php endif; ?><div class="form-text">最多 20 個字</div></div>
         <div class="col-md-6">
             <label class="form-label">主分類</label>
             <select class="form-select" id="ParentCategoryId" name="parent_cat_id">
@@ -151,8 +167,10 @@ ob_start();
             <div class="admin-image-preview mb-2">
                 <img id="PicturePreview" src="<?= h(asset($book['picture'] ?? '')) ?>" alt="圖片預覽" onerror="this.src='/images/logo_discuss.png'">
             </div>
-            <input class="form-control image-path-input" id="PicturePath" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255" data-preview="PicturePreview">
-            <input class="form-control mt-2 image-file-input" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="PicturePreview">
+            <input class="form-control image-path-input<?= isset($fieldErrors['picture']) ? ' is-invalid' : '' ?>" id="PicturePath" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255" data-preview="PicturePreview">
+            <?php if (isset($fieldErrors['picture'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['picture']) ?></div><?php endif; ?>
+            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['picture_file']) ? ' is-invalid' : '' ?>" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="PicturePreview">
+            <?php if (isset($fieldErrors['picture_file'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['picture_file']) ?></div><?php endif; ?>
             <div class="form-text">圖片路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：500x500 內，1MB 以內。</div>
         </div>
         <div class="col-md-6">
@@ -160,8 +178,10 @@ ob_start();
             <div class="admin-image-preview mb-2">
                 <img id="ThumbPreview" src="<?= h(asset($book['thumb'] ?? '')) ?>" alt="縮圖預覽" onerror="this.src='/images/logo_discuss.png'">
             </div>
-            <input class="form-control image-path-input" id="ThumbPath" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255" data-preview="ThumbPreview">
-            <input class="form-control mt-2 image-file-input" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="ThumbPreview">
+            <input class="form-control image-path-input<?= isset($fieldErrors['thumb']) ? ' is-invalid' : '' ?>" id="ThumbPath" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255" data-preview="ThumbPreview">
+            <?php if (isset($fieldErrors['thumb'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['thumb']) ?></div><?php endif; ?>
+            <input class="form-control mt-2 image-file-input<?= isset($fieldErrors['thumb_file']) ? ' is-invalid' : '' ?>" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp" data-preview="ThumbPreview">
+            <?php if (isset($fieldErrors['thumb_file'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['thumb_file']) ?></div><?php endif; ?>
             <div class="form-text">縮圖路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：250x250 內，500KB 以內。</div>
         </div>
         <div class="col-12">
@@ -193,11 +213,24 @@ ob_start();
             <div class="form-text">此欄位會儲存為 HTML，並在前台書籍頁直接渲染。</div>
         </div>
         <div class="col-12"><label class="form-label">目錄</label><textarea class="form-control" name="toc" rows="6"><?= h($book['toc'] ?? '') ?></textarea></div>
-        <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>" maxlength="500"><div class="form-text">最多 500 個字</div></div>
+        <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control<?= isset($fieldErrors['preview_notice']) ? ' is-invalid' : '' ?>" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>" maxlength="500"><?php if (isset($fieldErrors['preview_notice'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['preview_notice']) ?></div><?php endif; ?><div class="form-text">最多 500 個字</div></div>
     </div>
     <div class="mt-3"><button class="btn btn-success" type="submit">儲存</button></div>
 </form>
 <script>
+(function () {
+    var form = document.querySelector('form[data-first-error]');
+    if (!form) return;
+    var firstError = form.getAttribute('data-first-error');
+    if (!firstError) return;
+    var escapedName = window.CSS && CSS.escape ? CSS.escape(firstError) : firstError.replace(/"/g, '\\"');
+    var field = form.querySelector('[name="' + escapedName + '"]');
+    if (!field) return;
+    window.setTimeout(function () {
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        field.focus({ preventScroll: true });
+    }, 80);
+})();
 (function () {
     var parentCategory = document.getElementById('ParentCategoryId');
     var category = document.getElementById('CategoryId');
