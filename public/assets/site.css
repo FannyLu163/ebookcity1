@@ -1,0 +1,24 @@
+body { background: #f7f7f5; }
+.site-shell { max-width: 1180px; }
+.navbar .nav-link { white-space: nowrap; font-size: .95rem; }
+.category-dropdown { min-width: 13rem; max-height: 70vh; overflow-y: auto; }
+.book-cover { width: 100%; max-height: 220px; object-fit: contain; background: #fff; }
+.book-card { height: 100%; }
+.book-card .card-title { font-size: 1.05rem; line-height: 1.35; }
+.book-summary { color: #555; font-size: .95rem; }
+.detail-cover { max-width: 190px; max-height: 280px; object-fit: contain; background: #fff; }
+.legacy-html img { max-width: 100%; height: auto; }
+.book-tab-scroll { max-height: min(70vh, 42rem); overflow-y: auto; padding-right: .5rem; }
+.site-footer { border-top: 1px solid #dee2e6; color: #6c757d; font-size: .9rem; line-height: 1.7; text-align: center; }
+.author-avatar { width: 82px; height: 82px; object-fit: cover; background: #fff; }
+.author-detail-image { max-width: 190px; max-height: 280px; object-fit: contain; background: #fff; }
+.author-books-scroll { max-height: 34rem; overflow-y: auto; padding-right: .35rem; }
+.author-card-body { min-width: 0; flex: 1 1 auto; }
+.author-name,
+.author-summary,
+.author-link,
+.author-detail-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+@media (max-width: 991.98px) { .navbar form[role="search"] { width: 100%; margin-top: .75rem; } }
