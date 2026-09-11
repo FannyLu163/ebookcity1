@@ -52,6 +52,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (mb_strlen(trim((string)($_POST['preview_notice'] ?? '')), 'UTF-8') > 500) {
             throw new RuntimeException('試閱說明最多 500 個字');
         }
+        if (mb_strlen(trim((string)($_POST['picture'] ?? '')), 'UTF-8') > 255) {
+            throw new RuntimeException('圖片路徑最多 255 個字');
+        }
+        if (mb_strlen(trim((string)($_POST['thumb'] ?? '')), 'UTF-8') > 255) {
+            throw new RuntimeException('縮圖路徑最多 255 個字');
+        }
+        $uploadedPicture = admin_save_book_image_upload('picture_file', $id, 'cover', 500, 500, 1024 * 1024);
+        if ($uploadedPicture !== null) {
+            $_POST['picture'] = $uploadedPicture;
+        }
+        $uploadedThumb = admin_save_book_image_upload('thumb_file', $id, 'thumb', 250, 250, 500 * 1024);
+        if ($uploadedThumb !== null) {
+            $_POST['thumb'] = $uploadedThumb;
+        }
         $newId = admin_save_book($_POST);
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
         exit;
@@ -71,7 +85,7 @@ ob_start();
 </div>
 <?php if ($saved): ?><div class="alert alert-success">已儲存。</div><?php endif; ?>
 <?php if ($error !== ''): ?><div class="alert alert-danger"><?= h($error) ?></div><?php endif; ?>
-<form method="post" class="bg-white border rounded p-3">
+<form method="post" class="bg-white border rounded p-3" enctype="multipart/form-data">
     <input type="hidden" name="id" value="<?= h((string)($book['id'] ?? 0)) ?>">
     <div class="row g-3">
         <div class="col-md-8"><label class="form-label">書名</label><input class="form-control" name="title" value="<?= h($book['title'] ?? '') ?>" maxlength="50" required><div class="form-text">最多 50 個字</div></div>
@@ -132,8 +146,18 @@ ob_start();
             </div>
         </div>
         <div class="col-md-4 d-flex align-items-end"><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="is_visible" value="1"<?= checked_attr(!empty($book['is_visible'])) ?>> 前台顯示</label></div>
-        <div class="col-md-6"><label class="form-label">圖片路徑</label><input class="form-control" name="picture" value="<?= h($book['picture'] ?? '') ?>"></div>
-        <div class="col-md-6"><label class="form-label">縮圖路徑</label><input class="form-control" name="thumb" value="<?= h($book['thumb'] ?? '') ?>"></div>
+        <div class="col-md-6">
+            <label class="form-label">圖片路徑</label>
+            <input class="form-control" name="picture" value="<?= h($book['picture'] ?? '') ?>" maxlength="255">
+            <input class="form-control mt-2" type="file" name="picture_file" accept="image/jpeg,image/png,image/gif,image/webp">
+            <div class="form-text">圖片路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：500x500 內，1MB 以內。</div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">縮圖路徑</label>
+            <input class="form-control" name="thumb" value="<?= h($book['thumb'] ?? '') ?>" maxlength="255">
+            <input class="form-control mt-2" type="file" name="thumb_file" accept="image/jpeg,image/png,image/gif,image/webp">
+            <div class="form-text">縮圖路徑最多 255 個字。上傳後會存到 /imgs/pro/，系統會自動改檔名避免重複。限制：250x250 內，500KB 以內。</div>
+        </div>
         <div class="col-12">
             <label class="form-label">簡介 HTML</label>
             <textarea class="form-control font-monospace" name="short_intro" rows="10" spellcheck="false" placeholder="<p>可輸入 HTML 內容</p>"><?= h($book['short_intro'] ?? '') ?></textarea>
