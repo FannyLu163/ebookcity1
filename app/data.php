@@ -3,6 +3,17 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+function db_error(?string $message = null): ?string
+{
+    static $error = null;
+
+    if ($message !== null) {
+        $error = $message;
+    }
+
+    return $error;
+}
+
 function db(): ?PDO
 {
     static $pdo = false;
@@ -17,16 +28,20 @@ function db(): ?PDO
     $pass = $config['db_pass'] ?: ($asp['pass'] ?? '');
 
     if (!$dsn) {
+        db_error('找不到資料庫連線設定，請確認 .env 或原 ASP 專案 Web.config。');
         return $pdo = null;
     }
 
     try {
-        return $pdo = new PDO($dsn, $user, $pass, [
+        $pdo = new PDO($dsn, $user, $pass, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
-    } catch (Throwable) {
+        db_error('');
+        return $pdo;
+    } catch (Throwable $e) {
+        db_error($e->getMessage());
         return $pdo = null;
     }
 }
@@ -459,14 +474,21 @@ function admin_dashboard(): array
 {
     $pdo = db();
     if (!$pdo) {
-        return ['total_books' => 0, 'visible_books' => 0, 'total_authors' => 0];
+        return [
+            'total_books' => 0,
+            'visible_books' => 0,
+            'total_authors' => 0,
+            'error' => db_error() ?: '資料庫尚未連線',
+        ];
     }
 
     $stmt = $pdo->query('SELECT
         (SELECT COUNT(1) FROM dbo.products) AS total_books,
         (SELECT COUNT(1) FROM dbo.products WHERE avail = 1 OR avail IS NULL) AS visible_books,
         (SELECT COUNT(1) FROM dbo.author_profiles WHERE [status] = 1 OR [status] IS NULL) AS total_authors');
-    return $stmt->fetch() ?: ['total_books' => 0, 'visible_books' => 0, 'total_authors' => 0];
+    $dashboard = $stmt->fetch() ?: ['total_books' => 0, 'visible_books' => 0, 'total_authors' => 0];
+    $dashboard['error'] = null;
+    return $dashboard;
 }
 
 function admin_find_books(string $q = '', int $page = 1, int $pageSize = 20): array

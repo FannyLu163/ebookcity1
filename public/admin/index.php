@@ -7,6 +7,11 @@ $dashboard = admin_dashboard();
 ob_start();
 ?>
 <h1 class="h3 mb-3">後台首頁</h1>
+<?php if (!empty($dashboard['error'])): ?>
+    <div class="alert alert-warning" role="alert">
+        資料庫目前無法連線，因此統計暫時顯示為 0。錯誤訊息：<?= h((string)$dashboard['error']) ?>
+    </div>
+<?php endif; ?>
 <div class="row g-3">
     <div class="col-12 col-md-4"><div class="bg-white border rounded p-4 shadow-sm"><div class="text-muted">全部書籍</div><div class="display-6"><?= h((string)$dashboard['total_books']) ?></div></div></div>
     <div class="col-12 col-md-4"><div class="bg-white border rounded p-4 shadow-sm"><div class="text-muted">前台顯示書籍</div><div class="display-6"><?= h((string)$dashboard['visible_books']) ?></div></div></div>
@@ -17,4 +22,3 @@ ob_start();
     <a class="btn btn-outline-success" href="/admin/authors.php">管理作者</a>
 </div>
 <?php admin_layout('後台首頁', ob_get_clean()); ?>
-
