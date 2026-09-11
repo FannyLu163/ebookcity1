@@ -448,3 +448,284 @@ function find_author_books(PDO $pdo, int $authorId): array
         return [];
     }
 }
+
+function db_value(?string $value): ?string
+{
+    $value = trim((string)$value);
+    return $value === '' ? null : $value;
+}
+
+function admin_dashboard(): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return ['total_books' => 0, 'visible_books' => 0, 'total_authors' => 0];
+    }
+
+    $stmt = $pdo->query('SELECT
+        (SELECT COUNT(1) FROM dbo.products) AS total_books,
+        (SELECT COUNT(1) FROM dbo.products WHERE avail = 1 OR avail IS NULL) AS visible_books,
+        (SELECT COUNT(1) FROM dbo.author_profiles WHERE [status] = 1 OR [status] IS NULL) AS total_authors');
+    return $stmt->fetch() ?: ['total_books' => 0, 'visible_books' => 0, 'total_authors' => 0];
+}
+
+function admin_find_books(string $q = '', int $page = 1, int $pageSize = 20): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return ['items' => [], 'total' => 0];
+    }
+    $page = max(1, $page);
+    $offset = ($page - 1) * $pageSize;
+    $where = '1 = 1';
+    $params = [];
+    if ($q !== '') {
+        $where = '(p.prod_name LIKE :q_title OR p.author LIKE :q_author OR p.isbn LIKE :q_isbn OR bp.display_title LIKE :q_display_title OR bp.display_author LIKE :q_display_author)';
+        foreach ([':q_title', ':q_author', ':q_isbn', ':q_display_title', ':q_display_author'] as $name) {
+            $params[$name] = '%' . $q . '%';
+        }
+    }
+    $count = $pdo->prepare('SELECT COUNT(1) FROM dbo.products AS p LEFT JOIN dbo.book_profiles AS bp ON bp.product_id = p.id WHERE ' . $where);
+    foreach ($params as $name => $value) {
+        $count->bindValue($name, $value);
+    }
+    $count->execute();
+
+    $stmt = $pdo->prepare('SELECT p.id, COALESCE(bp.display_title, p.prod_name) AS title, bp.subtitle,
+            COALESCE(bp.display_author, p.author) AS author, p.pubdate,
+            COALESCE(NULLIF(p.thumb, N\'\'), NULLIF(p.picture, N\'\')) AS cover_image,
+            bc.cat_name, bp.slug,
+            CAST(CASE WHEN (p.avail = 1 OR p.avail IS NULL) AND (bp.[status] = 1 OR bp.id IS NULL) THEN 1 ELSE 0 END AS INT) AS is_visible
+        FROM dbo.products AS p
+        LEFT JOIN dbo.book_profiles AS bp ON bp.product_id = p.id
+        LEFT JOIN dbo.categories AS bc ON bc.id = p.cat_id
+        WHERE ' . $where . '
+        ORDER BY p.id DESC
+        OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY');
+    foreach ($params as $name => $value) {
+        $stmt->bindValue($name, $value);
+    }
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->bindValue(':page_size', $pageSize, PDO::PARAM_INT);
+    $stmt->execute();
+    return ['items' => $stmt->fetchAll(), 'total' => (int)$count->fetchColumn()];
+}
+
+function admin_find_authors(string $q = '', int $page = 1, int $pageSize = 20): array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return ['items' => [], 'total' => 0];
+    }
+    $page = max(1, $page);
+    $offset = ($page - 1) * $pageSize;
+    $where = '1 = 1';
+    $params = [];
+    if ($q !== '') {
+        $where = '(a.pen_name LIKE :q_name OR a.site_url LIKE :q_site OR a.site2_url LIKE :q_site2 OR a.intro LIKE :q_intro OR a.speak LIKE :q_speak)';
+        foreach ([':q_name', ':q_site', ':q_site2', ':q_intro', ':q_speak'] as $name) {
+            $params[$name] = '%' . $q . '%';
+        }
+    }
+    $count = $pdo->prepare('SELECT COUNT(1) FROM dbo.author_profiles AS a WHERE ' . $where);
+    foreach ($params as $name => $value) {
+        $count->bindValue($name, $value);
+    }
+    $count->execute();
+
+    $stmt = $pdo->prepare('SELECT a.id, a.slug, a.pen_name, a.site_url,
+            COALESCE(NULLIF(a.avatar_image, N\'\'), NULLIF(a.profile_image, N\'\')) AS avatar,
+            a.sort_order, a.is_recommended, a.[status],
+            ISNULL(book_counts.book_count, 0) AS book_count
+        FROM dbo.author_profiles AS a
+        LEFT JOIN (
+            SELECT author_profile_id, COUNT(*) AS book_count
+            FROM dbo.author_book_map
+            GROUP BY author_profile_id
+        ) AS book_counts ON book_counts.author_profile_id = a.id
+        WHERE ' . $where . '
+        ORDER BY a.id DESC
+        OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY');
+    foreach ($params as $name => $value) {
+        $stmt->bindValue($name, $value);
+    }
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->bindValue(':page_size', $pageSize, PDO::PARAM_INT);
+    $stmt->execute();
+    return ['items' => $stmt->fetchAll(), 'total' => (int)$count->fetchColumn()];
+}
+
+function admin_find_author(int $id): ?array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT TOP (1) id, slug, pen_name, site_url, site2_url, intro, speak, avatar_image, profile_image, sort_order, is_recommended, [status] FROM dbo.author_profiles WHERE id = :id');
+    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetch() ?: null;
+}
+
+function admin_save_author(array $data): int
+{
+    $pdo = db();
+    if (!$pdo) {
+        throw new RuntimeException('資料庫尚未連線');
+    }
+    $id = (int)($data['id'] ?? 0);
+    $slug = db_value($data['slug'] ?? '') ?: create_slug($data['pen_name'] ?? 'author');
+    if ($id > 0) {
+        $stmt = $pdo->prepare('UPDATE dbo.author_profiles SET slug = :slug, pen_name = :pen_name, site_url = :site_url, site2_url = :site2_url,
+            intro = :intro, speak = :speak, avatar_image = :avatar_image, profile_image = :profile_image, sort_order = :sort_order,
+            is_recommended = :is_recommended, [status] = :status WHERE id = :id');
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+    } else {
+        $stmt = $pdo->prepare('INSERT INTO dbo.author_profiles
+            (legacy_blog_id, slug, pen_name, site_url, site2_url, intro, speak, avatar_image, profile_image, sort_order, is_recommended, [status], source_note, created_at)
+            OUTPUT INSERTED.id
+            VALUES (0, :slug, :pen_name, :site_url, :site2_url, :intro, :speak, :avatar_image, :profile_image, :sort_order, :is_recommended, :status, N\'php-admin\', SYSUTCDATETIME())');
+    }
+    bind_author_form($stmt, $data, $slug);
+    $stmt->execute();
+    return $id > 0 ? $id : (int)$stmt->fetchColumn();
+}
+
+function bind_author_form(PDOStatement $stmt, array $data, string $slug): void
+{
+    $stmt->bindValue(':slug', $slug);
+    $stmt->bindValue(':pen_name', db_value($data['pen_name'] ?? ''));
+    $stmt->bindValue(':site_url', db_value($data['site_url'] ?? ''));
+    $stmt->bindValue(':site2_url', db_value($data['site2_url'] ?? ''));
+    $stmt->bindValue(':intro', db_value($data['intro'] ?? ''));
+    $stmt->bindValue(':speak', db_value($data['speak'] ?? ''));
+    $stmt->bindValue(':avatar_image', db_value($data['avatar_image'] ?? ''));
+    $stmt->bindValue(':profile_image', db_value($data['profile_image'] ?? ''));
+    $stmt->bindValue(':sort_order', (int)($data['sort_order'] ?? 0), PDO::PARAM_INT);
+    $stmt->bindValue(':is_recommended', !empty($data['is_recommended']) ? 1 : 0, PDO::PARAM_INT);
+    $stmt->bindValue(':status', !empty($data['status']) ? 1 : 0, PDO::PARAM_INT);
+}
+
+function admin_find_book(int $id): ?array
+{
+    $pdo = db();
+    if (!$pdo) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT TOP (1) p.id, COALESCE(bp.display_title, p.prod_name) AS title, bp.subtitle,
+        COALESCE(bp.display_author, p.author) AS author, p.pubdate, p.isbn, p.sn, p.picture, p.thumb,
+        p.cat_id, bp.slug, bp.short_intro, bp.toc, bp.preview_notice,
+        CAST(CASE WHEN (p.avail = 1 OR p.avail IS NULL) AND (bp.[status] = 1 OR bp.id IS NULL) THEN 1 ELSE 0 END AS INT) AS is_visible
+        FROM dbo.products AS p
+        LEFT JOIN dbo.book_profiles AS bp ON bp.product_id = p.id
+        WHERE p.id = :id');
+    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetch() ?: null;
+}
+
+function admin_save_book(array $data): int
+{
+    $pdo = db();
+    if (!$pdo) {
+        throw new RuntimeException('資料庫尚未連線');
+    }
+    $id = (int)($data['id'] ?? 0);
+    $visible = !empty($data['is_visible']) ? 1 : 0;
+    if ($id <= 0) {
+        $next = $pdo->query('SELECT ISNULL(MAX(id), 0) + 1 FROM dbo.products WITH (UPDLOCK, HOLDLOCK)');
+        $id = (int)$next->fetchColumn();
+        $stmt = $pdo->prepare('INSERT INTO dbo.products
+            (id, mall, cat_id, [rank], prod_name, author, sn, pubdate, isbn, thumb, picture, avail, stock, has_editor, has_preview, content, [index], cdate, add_time, is_delete)
+            VALUES (:id, 0, :cat_id, 0, :title, :author, :sn, :pubdate, :isbn, :thumb, :picture, :visible, 0, 0, 0, :short_intro, :toc, SYSUTCDATETIME(), SYSUTCDATETIME(), 0)');
+    } else {
+        $stmt = $pdo->prepare('UPDATE dbo.products SET prod_name = :title, author = :author, pubdate = :pubdate, isbn = :isbn, sn = :sn,
+            cat_id = :cat_id, picture = :picture, thumb = :thumb, avail = :visible WHERE id = :id');
+    }
+    bind_book_product_form($stmt, $id, $data, $visible);
+    $stmt->execute();
+
+    $exists = $pdo->prepare('SELECT COUNT(1) FROM dbo.book_profiles WHERE product_id = :id');
+    $exists->bindValue(':id', $id, PDO::PARAM_INT);
+    $exists->execute();
+    if ((int)$exists->fetchColumn() > 0) {
+        $profile = $pdo->prepare('UPDATE dbo.book_profiles SET display_title = :title, subtitle = :subtitle, display_author = :author,
+            short_intro = :short_intro, toc = :toc, preview_notice = :preview_notice, [status] = :visible WHERE product_id = :id');
+    } else {
+        $profile = $pdo->prepare('INSERT INTO dbo.book_profiles (product_id, slug, display_title, subtitle, display_author, short_intro, toc, preview_notice, [status])
+            VALUES (:id, :slug, :title, :subtitle, :author, :short_intro, :toc, :preview_notice, :visible)');
+        $profile->bindValue(':slug', 'book-' . $id);
+    }
+    bind_book_profile_form($profile, $id, $data, $visible);
+    $profile->execute();
+    sync_admin_book_category_tags($pdo, $id, (int)($data['cat_id'] ?? 0));
+    return $id;
+}
+
+function bind_book_product_form(PDOStatement $stmt, int $id, array $data, int $visible): void
+{
+    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+    $stmt->bindValue(':title', db_value($data['title'] ?? ''));
+    $stmt->bindValue(':author', db_value($data['author'] ?? ''));
+    $stmt->bindValue(':pubdate', db_value($data['pubdate'] ?? ''));
+    $stmt->bindValue(':isbn', db_value($data['isbn'] ?? ''));
+    $stmt->bindValue(':sn', db_value($data['sn'] ?? ''));
+    $stmt->bindValue(':cat_id', (int)($data['cat_id'] ?? 0), PDO::PARAM_INT);
+    $stmt->bindValue(':picture', db_value($data['picture'] ?? ''));
+    $stmt->bindValue(':thumb', db_value($data['thumb'] ?? ''));
+    $stmt->bindValue(':visible', $visible, PDO::PARAM_INT);
+    if (str_contains($stmt->queryString, ':short_intro')) {
+        $stmt->bindValue(':short_intro', db_value($data['short_intro'] ?? ''));
+        $stmt->bindValue(':toc', db_value($data['toc'] ?? ''));
+    }
+}
+
+function bind_book_profile_form(PDOStatement $stmt, int $id, array $data, int $visible): void
+{
+    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+    $stmt->bindValue(':title', db_value($data['title'] ?? ''));
+    $stmt->bindValue(':subtitle', db_value($data['subtitle'] ?? ''));
+    $stmt->bindValue(':author', db_value($data['author'] ?? ''));
+    $stmt->bindValue(':short_intro', db_value($data['short_intro'] ?? ''));
+    $stmt->bindValue(':toc', db_value($data['toc'] ?? ''));
+    $stmt->bindValue(':preview_notice', db_value($data['preview_notice'] ?? ''));
+    $stmt->bindValue(':visible', $visible, PDO::PARAM_INT);
+}
+
+function sync_admin_book_category_tags(PDO $pdo, int $productId, int $categoryId): void
+{
+    try {
+        $pdo->prepare("DELETE FROM dbo.book_tag_map WHERE product_id = :id AND tag_id IN (SELECT id FROM dbo.book_tags WHERE slug LIKE N'legacy-category-%')")
+            ->execute([':id' => $productId]);
+        if ($categoryId <= 0) {
+            return;
+        }
+        $stmt = $pdo->prepare("INSERT INTO dbo.book_tag_map (product_id, tag_id)
+            SELECT :product_id, bt.id FROM dbo.book_tags AS bt
+            WHERE bt.slug = CONCAT(N'legacy-category-', :category_id)
+              AND NOT EXISTS (SELECT 1 FROM dbo.book_tag_map AS existing WHERE existing.product_id = :product_id2 AND existing.tag_id = bt.id)");
+        $stmt->bindValue(':product_id', $productId, PDO::PARAM_INT);
+        $stmt->bindValue(':category_id', $categoryId, PDO::PARAM_INT);
+        $stmt->bindValue(':product_id2', $productId, PDO::PARAM_INT);
+        $stmt->execute();
+    } catch (Throwable) {
+    }
+}
+
+function admin_category_options(): array
+{
+    $items = [];
+    foreach (find_category_menu() as $root) {
+        $items[] = ['id' => $root['id'], 'name' => $root['name']];
+        foreach (($root['children'] ?? []) as $child) {
+            $items[] = ['id' => $child['id'], 'name' => '　' . $child['name']];
+        }
+    }
+    return $items;
+}
+
+function create_slug(string $value): string
+{
+    $slug = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $value), '-'));
+    return $slug !== '' ? substr($slug, 0, 120) : 'item-' . time();
+}

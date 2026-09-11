@@ -141,3 +141,13 @@ function pagination_pages(int $currentPage, int $totalPages, int $window = 2): a
 
     return $items;
 }
+
+function checked_attr(bool $value): string
+{
+    return $value ? ' checked' : '';
+}
+
+function selected_attr($left, $right): string
+{
+    return (string)$left === (string)$right ? ' selected' : '';
+}

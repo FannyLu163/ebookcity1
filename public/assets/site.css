@@ -6,6 +6,11 @@ body { background: #f7f7f5; }
 .book-card { height: 100%; }
 .book-card .card-title { font-size: 1.05rem; line-height: 1.35; }
 .book-summary { color: #555; font-size: .95rem; }
+.admin-cover { width: 54px; height: 74px; object-fit: contain; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; }
+.admin-list-image { width: 76px; }
+.admin-list-table td,
+.admin-list-table th { vertical-align: middle; }
+.admin-list-table { min-width: 820px; }
 .detail-cover { max-width: 190px; max-height: 280px; object-fit: contain; background: #fff; }
 .legacy-html img { max-width: 100%; height: auto; }
 .book-tab-scroll { max-height: min(70vh, 42rem); overflow-y: auto; padding-right: .5rem; }
