@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 ob_start();
 ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div id="EditBookTop" class="d-flex justify-content-between align-items-center mb-3">
     <div><h1 class="h3 mb-1"><?= $id > 0 ? '編輯書籍' : '新增書籍' ?></h1><div class="text-muted"><?= $id > 0 ? 'ID ' . h((string)$id) : '建立新的書籍資料' ?></div></div>
     <a class="btn btn-outline-secondary" href="/admin/books.php">返回列表</a>
 </div>
@@ -219,9 +219,25 @@ ob_start();
         <div class="col-12"><label class="form-label">目錄</label><textarea class="form-control" name="toc" rows="6"><?= h($book['toc'] ?? '') ?></textarea></div>
         <div class="col-12"><label class="form-label">試閱說明</label><input class="form-control<?= isset($fieldErrors['preview_notice']) ? ' is-invalid' : '' ?>" name="preview_notice" value="<?= h($book['preview_notice'] ?? '') ?>" maxlength="500"><?php if (isset($fieldErrors['preview_notice'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['preview_notice']) ?></div><?php endif; ?><div class="form-text">最多 500 個字</div></div>
     </div>
-    <div class="mt-3"><button class="btn btn-success" type="submit">儲存</button></div>
+    <div class="mt-3 d-grid gap-2">
+        <button class="btn btn-success" type="submit">儲存</button>
+        <?php if ((int)($book['id'] ?? 0) > 0): ?>
+            <a class="btn btn-outline-secondary" href="/book.php?id=<?= h((string)$book['id']) ?>" target="_blank" rel="noopener">查看前台</a>
+        <?php else: ?>
+            <button class="btn btn-outline-secondary" type="button" disabled>查看前台</button>
+        <?php endif; ?>
+        <button class="btn btn-outline-secondary" type="button" id="BackToEditTop">返回上方</button>
+    </div>
 </form>
 <script>
+(function () {
+    var button = document.getElementById('BackToEditTop');
+    var top = document.getElementById('EditBookTop');
+    if (!button || !top) return;
+    button.addEventListener('click', function () {
+        top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+})();
 (function () {
     var form = document.querySelector('form[data-first-error]');
     if (!form) return;
