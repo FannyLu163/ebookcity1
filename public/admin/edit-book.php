@@ -32,8 +32,16 @@ if ($selectedParentId <= 0 && !empty($book['cat_id'])) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if (trim((string)($_POST['title'] ?? '')) === '') {
+        $titleValue = trim((string)($_POST['title'] ?? ''));
+        $subtitleValue = trim((string)($_POST['subtitle'] ?? ''));
+        if ($titleValue === '') {
             throw new RuntimeException('請輸入書名');
+        }
+        if (mb_strlen($titleValue, 'UTF-8') > 50) {
+            throw new RuntimeException('書名最多 50 個字');
+        }
+        if (mb_strlen($subtitleValue, 'UTF-8') > 100) {
+            throw new RuntimeException('副標題最多 100 個字');
         }
         $newId = admin_save_book($_POST);
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
@@ -57,8 +65,8 @@ ob_start();
 <form method="post" class="bg-white border rounded p-3">
     <input type="hidden" name="id" value="<?= h((string)($book['id'] ?? 0)) ?>">
     <div class="row g-3">
-        <div class="col-md-8"><label class="form-label">書名</label><input class="form-control" name="title" value="<?= h($book['title'] ?? '') ?>" required></div>
-        <div class="col-md-4"><label class="form-label">副標題</label><input class="form-control" name="subtitle" value="<?= h($book['subtitle'] ?? '') ?>"></div>
+        <div class="col-md-8"><label class="form-label">書名</label><input class="form-control" name="title" value="<?= h($book['title'] ?? '') ?>" maxlength="50" required><div class="form-text">最多 50 個字</div></div>
+        <div class="col-md-4"><label class="form-label">副標題</label><input class="form-control" name="subtitle" value="<?= h($book['subtitle'] ?? '') ?>" maxlength="100"><div class="form-text">最多 100 個字</div></div>
         <input type="hidden" id="Author" name="author" value="<?= h($book['author'] ?? '') ?>">
         <div class="col-md-4"><label class="form-label">出版日期</label><input class="form-control" name="pubdate" type="date" value="<?= h(!empty($book['pubdate']) ? substr((string)$book['pubdate'], 0, 10) : '') ?>"></div>
         <div class="col-md-4"><label class="form-label">ISBN</label><input class="form-control" name="isbn" value="<?= h($book['isbn'] ?? '') ?>"></div>

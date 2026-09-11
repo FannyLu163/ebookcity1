@@ -636,6 +636,17 @@ function admin_save_book(array $data): int
     if (!$pdo) {
         throw new RuntimeException('資料庫尚未連線');
     }
+    $title = trim((string)($data['title'] ?? ''));
+    $subtitle = trim((string)($data['subtitle'] ?? ''));
+    if ($title === '') {
+        throw new RuntimeException('請輸入書名');
+    }
+    if (mb_strlen($title, 'UTF-8') > 50) {
+        throw new RuntimeException('書名最多 50 個字');
+    }
+    if (mb_strlen($subtitle, 'UTF-8') > 100) {
+        throw new RuntimeException('副標題最多 100 個字');
+    }
     $id = (int)($data['id'] ?? 0);
     $selectedAuthorIds = normalize_author_ids($data['selected_author_ids'] ?? []);
     if (!empty($data['new_author_name'])) {
