@@ -9,6 +9,11 @@ const ADMIN_SESSION_KEY = 'ebookcity_admin_authenticated';
 function admin_start(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
+        $sessionPath = dirname(__DIR__) . '/storage/sessions';
+        if (!is_dir($sessionPath)) {
+            mkdir($sessionPath, 0775, true);
+        }
+        session_save_path($sessionPath);
         session_start();
     }
 }
