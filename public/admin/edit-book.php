@@ -85,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: /admin/edit-book.php?id=' . $newId . '&saved=1');
         exit;
     } catch (Throwable $e) {
+        if (!$fieldErrors && is_duplicate_author_key_error($e)) {
+            $fieldErrors['new_author_name'] = '新增作者資料重複，請改用關聯作者選單選取既有作者，或輸入不同作者名稱。';
+        }
         $error = $fieldErrors ? '' : $e->getMessage();
         $firstErrorField = $fieldErrors ? (string)array_key_first($fieldErrors) : '';
         $book = $_POST + ['id' => $id, 'selected_author_ids' => $_POST['selected_author_ids'] ?? []];
@@ -157,7 +160,8 @@ ob_start();
             <button class="btn btn-outline-secondary btn-sm mt-2" type="button" id="ShowNewAuthor">新增作者</button>
             <div class="mt-2 d-none" id="NewAuthorPanel">
                 <label class="form-label small mb-1">新增作者</label>
-                <input class="form-control" id="NewAuthorName" name="new_author_name" value="<?= h($book['new_author_name'] ?? '') ?>" placeholder="輸入新作者名稱">
+                <input class="form-control<?= isset($fieldErrors['new_author_name']) ? ' is-invalid' : '' ?>" id="NewAuthorName" name="new_author_name" value="<?= h($book['new_author_name'] ?? '') ?>" placeholder="輸入新作者名稱">
+                <?php if (isset($fieldErrors['new_author_name'])): ?><div class="invalid-feedback d-block"><?= h($fieldErrors['new_author_name']) ?></div><?php endif; ?>
                 <div class="form-text">儲存後會建立作者資料，並與這本書關聯。</div>
             </div>
         </div>

@@ -606,7 +606,8 @@ function admin_save_author(array $data): int
         $stmt = $pdo->prepare('INSERT INTO dbo.author_profiles
             (legacy_blog_id, slug, pen_name, site_url, site2_url, intro, speak, avatar_image, profile_image, sort_order, is_recommended, [status], source_note, created_at)
             OUTPUT INSERTED.id
-            VALUES (0, :slug, :pen_name, :site_url, :site2_url, :intro, :speak, :avatar_image, :profile_image, :sort_order, :is_recommended, :status, N\'php-admin\', SYSUTCDATETIME())');
+            VALUES (:legacy_blog_id, :slug, :pen_name, :site_url, :site2_url, :intro, :speak, :avatar_image, :profile_image, :sort_order, :is_recommended, :status, N\'php-admin\', SYSUTCDATETIME())');
+        $stmt->bindValue(':legacy_blog_id', (int)($data['legacy_blog_id'] ?? next_php_author_legacy_blog_id($pdo)), PDO::PARAM_INT);
     }
     bind_author_form($stmt, $data, $slug);
     $stmt->execute();
@@ -854,9 +855,22 @@ function admin_create_author_name(string $name): int
     if ($name === '') {
         return 0;
     }
+    $pdo = db();
+    if (!$pdo) {
+        throw new RuntimeException('資料庫尚未連線');
+    }
+    $existing = $pdo->prepare('SELECT TOP (1) id FROM dbo.author_profiles WHERE pen_name = :pen_name ORDER BY [status] DESC, id ASC');
+    $existing->bindValue(':pen_name', $name);
+    $existing->execute();
+    $existingId = (int)$existing->fetchColumn();
+    if ($existingId > 0) {
+        return $existingId;
+    }
+
     return admin_save_author([
         'pen_name' => $name,
-        'slug' => create_author_slug($name),
+        'slug' => create_unique_author_slug($pdo, $name),
+        'legacy_blog_id' => next_php_author_legacy_blog_id($pdo),
         'site_url' => '',
         'site2_url' => '',
         'intro' => '',
@@ -869,10 +883,40 @@ function admin_create_author_name(string $name): int
     ]);
 }
 
+function next_php_author_legacy_blog_id(PDO $pdo): int
+{
+    $stmt = $pdo->query('SELECT ISNULL(MIN(legacy_blog_id), 0) - 1 FROM dbo.author_profiles WITH (UPDLOCK, HOLDLOCK)');
+    return min(-1, (int)$stmt->fetchColumn());
+}
+
 function create_author_slug(string $name): string
 {
     $base = 'author-' . create_slug($name);
     return $base === 'author-' ? 'author-new' : $base;
+}
+
+function create_unique_author_slug(PDO $pdo, string $name): string
+{
+    $base = create_author_slug($name);
+    $slug = $base;
+    for ($index = 2; $index < 1000; $index++) {
+        $stmt = $pdo->prepare('SELECT COUNT(1) FROM dbo.author_profiles WHERE slug = :slug');
+        $stmt->bindValue(':slug', $slug);
+        $stmt->execute();
+        if ((int)$stmt->fetchColumn() === 0) {
+            return $slug;
+        }
+        $slug = $base . '-' . $index;
+    }
+
+    return $base . '-' . time();
+}
+
+function is_duplicate_author_key_error(Throwable $e): bool
+{
+    $message = $e->getMessage();
+    return str_contains($message, 'author_profiles')
+        && (str_contains($message, 'UX_author_profiles_legacy_blog_id') || str_contains($message, 'UX_author_profiles_slug'));
 }
 
 function admin_author_display_name(array $ids, string $fallback): string
