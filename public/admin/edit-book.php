@@ -226,9 +226,9 @@ ob_start();
         <?php else: ?>
             <button class="btn btn-outline-secondary" type="button" disabled>查看前台</button>
         <?php endif; ?>
-        <button class="btn btn-outline-secondary" type="button" id="BackToEditTop">返回上方</button>
     </div>
 </form>
+<button class="admin-back-to-top" type="button" id="BackToEditTop" aria-label="返回上方" title="返回上方">↑</button>
 <script>
 (function () {
     var button = document.getElementById('BackToEditTop');

@@ -52,4 +52,27 @@ body { background: #f7f7f5; }
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+.admin-back-to-top {
+    position: fixed;
+    right: 1.75rem;
+    bottom: 1.75rem;
+    z-index: 1030;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 0;
+    border-radius: 50%;
+    background: #198754;
+    color: #fff;
+    font-size: 1.7rem;
+    line-height: 1;
+    box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .22);
+}
+.admin-back-to-top:hover,
+.admin-back-to-top:focus {
+    background: #146c43;
+    color: #fff;
+    outline: 3px solid rgba(25, 135, 84, .25);
+    outline-offset: 3px;
+}
 @media (max-width: 991.98px) { .navbar form[role="search"] { width: 100%; margin-top: .75rem; } }
+@media (max-width: 575.98px) { .admin-back-to-top { right: 1rem; bottom: 1rem; width: 3rem; height: 3rem; } }
