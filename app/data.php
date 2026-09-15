@@ -101,7 +101,8 @@ function find_books(array $filters = []): array
         $params[':tag'] = (string)$filters['tag'];
     }
 
-    $from = 'FROM products p LEFT JOIN book_profiles bp ON bp.product_id = p.id LEFT JOIN bookcats bc ON bc.id = p.cat_id WHERE ' . implode(' AND ', $where);
+    $fromBase = 'FROM products p LEFT JOIN book_profiles bp ON bp.product_id = p.id LEFT JOIN bookcats bc ON bc.id = p.cat_id';
+    $from = $fromBase . ' WHERE ' . implode(' AND ', $where);
 
     $count = $pdo->prepare('SELECT COUNT(*) ' . $from);
     foreach ($params as $name => $value) {
@@ -109,11 +110,22 @@ function find_books(array $filters = []): array
     }
     $count->execute();
 
-    $sql = 'SELECT p.id, COALESCE(bp.display_title, p.prod_name) AS title, bp.subtitle,
-            COALESCE(bp.display_author, p.author) AS author, p.pubdate, p.isbn, p.thumb, p.picture,
-            bc.cat_name, bp.slug, bp.short_intro ' . $from . '
+    $sql = "SELECT p.id, COALESCE(bp.display_title, p.prod_name) AS title, bp.subtitle,
+            COALESCE(bp.display_author, p.author) AS author, author_links.authors AS linked_authors,
+            p.pubdate, p.isbn, p.thumb, p.picture,
+            bc.cat_name, bp.slug, bp.short_intro " . $fromBase . "
+            OUTER APPLY (
+                SELECT STRING_AGG(CONCAT(author.pen_name, N'|', author.slug), N';;') WITHIN GROUP (ORDER BY map.created_at ASC, author.sort_order ASC, author.id ASC) AS authors
+                FROM dbo.author_book_map AS map
+                INNER JOIN dbo.author_profiles AS author ON author.id = map.author_profile_id
+                WHERE map.product_id = p.id
+                  AND author.[status] = 1
+                  AND NULLIF(LTRIM(RTRIM(author.pen_name)), N'') IS NOT NULL
+                  AND NULLIF(LTRIM(RTRIM(author.slug)), N'') IS NOT NULL
+            ) AS author_links
+            WHERE " . implode(' AND ', $where) . "
             ORDER BY bp.featured_rank DESC, p.rank DESC, p.pubdate DESC, p.id DESC
-            OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY';
+            OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY";
     $stmt = $pdo->prepare($sql);
     foreach ($params as $name => $value) {
         $stmt->bindValue($name, $value);
@@ -122,7 +134,31 @@ function find_books(array $filters = []): array
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
 
-    return ['items' => $stmt->fetchAll(), 'total' => (int)$count->fetchColumn(), 'error' => null];
+    $items = array_map(static function (array $book): array {
+        $book['authors'] = parse_linked_authors((string)($book['linked_authors'] ?? ''));
+        return $book;
+    }, $stmt->fetchAll());
+
+    return ['items' => $items, 'total' => (int)$count->fetchColumn(), 'error' => null];
+}
+
+function parse_linked_authors(string $value): array
+{
+    if (trim($value) === '') {
+        return [];
+    }
+
+    $authors = [];
+    foreach (explode(';;', $value) as $item) {
+        [$name, $slug] = array_pad(explode('|', $item, 2), 2, '');
+        $name = trim($name);
+        $slug = trim($slug);
+        if ($name !== '' && $slug !== '') {
+            $authors[] = ['pen_name' => $name, 'slug' => $slug];
+        }
+    }
+
+    return $authors;
 }
 
 function find_book(string $key): ?array

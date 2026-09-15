@@ -29,7 +29,16 @@ ob_start();
                             <?php if (!empty($book['subtitle'])): ?><div class="text-muted small mb-1"><?= h($book['subtitle']) ?></div><?php endif; ?>
                             <p class="card-text small mb-2">
                                 <?php if (!empty($book['pubdate'])): ?>出版日期：<?= h(substr((string)$book['pubdate'], 0, 10)) ?><br><?php endif; ?>
-                                <?php if (!empty($book['author'])): ?>作者：<?= h($book['author']) ?><br><?php endif; ?>
+                                <?php if (!empty($book['authors'])): ?>
+                                    作者：
+                                    <?php foreach ($book['authors'] as $index => $author): ?>
+                                        <?php if ($index > 0): ?><span>、</span><?php endif; ?>
+                                        <a href="<?= h(author_href($author)) ?>"><?= h($author['pen_name']) ?></a>
+                                    <?php endforeach; ?>
+                                    <br>
+                                <?php elseif (!empty($book['author'])): ?>
+                                    作者：<?= h($book['author']) ?><br>
+                                <?php endif; ?>
                                 <?php if (!empty($book['cat_name'])): ?>分類：<?= h($book['cat_name']) ?><?php endif; ?>
                             </p>
                             <?php $summary = plain_excerpt($book['short_intro'] ?? $book['legacy_description'] ?? '', 120); ?>
