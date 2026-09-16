@@ -20,3 +20,13 @@ If the database is unavailable, the site falls back to sample data so the UI can
 ## Documentation
 
 - [操作說明書](docs/操作說明書.md)
+
+## Azure App Service
+
+For Azure App Service on Linux, set the Startup Command to:
+
+```bash
+cp /home/site/wwwroot/default /etc/nginx/sites-available/default && service nginx reload
+```
+
+The included `default` Nginx file points the site root to `/home/site/wwwroot/public`.
