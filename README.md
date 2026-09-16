@@ -17,3 +17,6 @@ Copy `.env.example` to `.env` and update the connection values.
 
 If the database is unavailable, the site falls back to sample data so the UI can still be previewed.
 
+## Documentation
+
+- [操作說明書](docs/操作說明書.md)
